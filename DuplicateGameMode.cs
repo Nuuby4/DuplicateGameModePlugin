@@ -283,15 +283,21 @@ namespace DuplicateGameModePlugin
                     string filePath = ofd.FileName;
                     var lines = File.ReadAllLines(filePath);
 
-                    PointerRef gameModeBlueprint = GetDefaultAlternateSpawnConnection(selectedSubWorld.RootObject as SubWorldData);
-                    CString gameModeLinkName = GetDefaultGameModeLinkName(selectedSubWorld.RootObject as SubWorldData, "SP");
-                    CString defaultSLFName = GetDefaultGameModeLinkName(selectedSubWorld.RootObject as SubWorldData, "SLF");
-                    App.Logger.Log(gameModeLinkName);
+                    Dictionary<int, PointerRef> gameModeBlueprint = GetDefaultAlternateSpawnConnection(selectedSubWorld.RootObject as SubWorldData);
+                    Dictionary<int, CString>  gameModeLinkNames = GetDefaultGameModeLinkName(selectedSubWorld.RootObject as SubWorldData, "SP");
+                    Dictionary<int, CString>  defaultSLFNames = GetDefaultGameModeLinkName(selectedSubWorld.RootObject as SubWorldData, "SLF");
 
                     if (true) //@TODO Add Option Value
                     {
-                        DisableConnectionsWithName(gameModeLinkName, selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint);
-                        DisableConnectionsWithName(defaultSLFName, selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint);
+                        for(int i = 0; i < gameModeLinkNames.Count; i++)
+                        {
+                            DisableConnectionsWithName(gameModeLinkNames[i], selectedSubWorld.RootObject as SubWorldData);
+                        }
+                        for (int i = 0; i < defaultSLFNames.Count; i++)
+                        {
+                            DisableConnectionsWithName(defaultSLFNames[i], selectedSubWorld.RootObject as SubWorldData);
+                        }
+
                     }
 
                     Dictionary<int, List<Vector3>> splineGroups = new Dictionary<int, List<Vector3>>();
@@ -338,8 +344,11 @@ namespace DuplicateGameModePlugin
                                 PointerRef spPtr = CreateExternalPointer(parentAsset, CreateNewSpawnPoint(parentAsset, linear, team.ToString(), priority, defaultEnabled));
 
                                 // Create connections to this spawn point
-                                CreateLinkConnection(selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint, gameModeLinkName, spPtr, DefaultLinkPort);
-                                index1++;
+                                for (int i = 0; i < gameModeBlueprint.Count; i++)
+                                {
+                                    CreateLinkConnection(selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint[i], gameModeLinkNames[i], spPtr, DefaultLinkPort);
+                                }
+                                index1+=gameModeLinkNames.Count;
                                 //App.Logger.Log(num1 + " " + num2 + " " + num3 + " " + num4 + " " + team + " " + " " + priority + " " + defaultEnabled);
                             }
                             else if (type == "SpawnLocationFinderEntityData")
@@ -370,8 +379,11 @@ namespace DuplicateGameModePlugin
                             bool defaultEnabled = true;
 
                             PointerRef spPtr = CreateExternalPointer(parentAsset, CreateNewSpawnLocationFinderShape(parentAsset, points, team.ToString(), defaultEnabled));
-                            CreateLinkConnection(selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint, defaultSLFName, spPtr, DefaultLinkPort);
-                            index++;
+                            for (int i = 0; i < gameModeBlueprint.Count; i++)
+                            {
+                                CreateLinkConnection(selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint[i], gameModeLinkNames[i], spPtr, DefaultLinkPort);
+                            }
+                            index+= defaultSLFNames.Count;
                         }
 
                         App.Logger.Log("Added " + index1 + " AlternateSpawns");
@@ -435,19 +447,17 @@ namespace DuplicateGameModePlugin
             return data;
         }
 
-        public void DisableConnectionsWithName(CString name, Blueprint bp, PointerRef existingConnection)
+        public void DisableConnectionsWithName(CString name, Blueprint bp)
         {
 
             foreach (LinkConnection connection in bp.LinkConnections)
             {
                 try
                 {
-
-                    if (connection.SourceField == name && connection.Source == existingConnection)
+                    if (connection.SourceField == name)
                     {
                         var disabledName = "DISABLED_" + name;
 
-                        // Optional: validate/clean input here if needed
                         connection.SourceField = disabledName;
                     }
                 }
@@ -508,60 +518,83 @@ namespace DuplicateGameModePlugin
                 layerRef.LightmapResolutionScale = 1;
             }
         }
+        
+        public struct TypeToReferences
+        {
+            string type;
+            int id;
+            PointerRef sourceBlueprint;
+            CString correspondingSourceField;
+        }
+
         public void CreateNewWorldPartReferenc(SubWorldData newSubWorld)
         {
 
         }
-        public PointerRef GetDefaultAlternateSpawnConnection(SubWorldData subWorld)
+        public Dictionary<int, PointerRef> GetDefaultAlternateSpawnConnection(SubWorldData subWorld)
         {
+            Dictionary<int, PointerRef> blueprintRefs = new();
 
-            foreach(LinkConnection connection in subWorld.LinkConnections)
+            int found = 0;
+            foreach (LinkConnection connection in subWorld.LinkConnections)
             {
-                if(connection.SourceField == "AlternativeSpawnPoints" || connection.SourceField == "0x88b5346e" || connection.SourceField == "Spawns" || connection.SourceField == "0xc6273ced")
+                if (connection.SourceField == "AlternativeSpawnPoints" || connection.SourceField == "0x88b5346e" || connection.SourceField == "Spawns" || connection.SourceField == "0xc6273ced" || connection.SourceField == "0xf4349b22")
                 {
-                    if(connection.TargetField == "0x00000000")
+                    if (connection.TargetField == "0x00000000" && !blueprintRefs.ContainsValue(connection.Source))
                     {
-                        App.Logger.Log("Found Existing Spawn Blueprint!" + connection.SourceFieldId);
-                        return connection.Source;                         
+                        blueprintRefs.Add(found, connection.Source);
+                        found++;                   
                     }
-                    
                 }
             }
-
-            PointerRef emptyPointer = new PointerRef();
-            App.Logger.Log("Didn't find Pointer Ref to existing prefab! Returned null");
-            return emptyPointer;
+            if(found == 0)
+            {
+                PointerRef emptyPointer = new PointerRef();
+                blueprintRefs.Add(0, emptyPointer);
+                App.Logger.Log("Didn't find Pointer Ref to existing prefab! Replacing with null reference");
+            }
+            return blueprintRefs;
         }
-        public CString GetDefaultGameModeLinkName(SubWorldData subWorld, string nametype)
+        public Dictionary<int, CString> GetDefaultGameModeLinkName(SubWorldData subWorld, string nametype)
         {
+            Dictionary<int, CString> foundNames = new Dictionary<int, CString>();
+
+            int found = 0;
             foreach (LinkConnection connection in subWorld.LinkConnections)
             {
                 if(nametype == "SP")
                 {
-                    if (connection.SourceField == "AlternativeSpawnPoints" || connection.SourceField == "0x88b5346e" || connection.SourceField == "Spawns" || connection.SourceField == "0xc6273ced")
+                    if (connection.SourceField == "AlternativeSpawnPoints" || connection.SourceField == "0x88b5346e" || connection.SourceField == "Spawns" || connection.SourceField == "0xc6273ced" || connection.SourceField == "0xf4349b22")
                     {
-                        if (connection.TargetField == "0x00000000")
+                        if (connection.TargetField == "0x00000000" && !foundNames.ContainsValue(connection.SourceField))
                         {
-                            App.Logger.Log("Found Existing Link Connection" + connection.SourceFieldId);
-                            return connection.SourceField;
+                            App.Logger.Log("Found Existing Link Connection " + connection.SourceField);
+                            foundNames.Add(found, connection.SourceField);
+                            found++;
                         }
 
                     }
                 }
                 else if (nametype == "SLF")
                 {
-                    if (connection.SourceField == "0xf8f067fa")
+                    if (connection.SourceField == "0xf8f067fa" || connection.SourceField == "0x588516b5")
                     {
-                        if (connection.TargetField == "0x00000000")
+                        if (connection.TargetField == "0x00000000" && !foundNames.ContainsValue(connection.SourceField))
                         {
-                            App.Logger.Log("Found Existing Link Connection" + connection.SourceFieldId);
-                            return connection.SourceField;
+                            App.Logger.Log("Found Existing Link Connection " + connection.SourceField);
+                            foundNames.Add(found, connection.SourceField);
+                            found++;
                         }
 
                     }
                 }
             }
-            return "TEMP_Connection";
+            if(found == 0)
+            {
+                foundNames.Add(0, "TEMP_CONNECTION");
+            }
+            //App.Logger.Log($"Found {found}");
+            return foundNames;
         }
         
         public static AlternateSpawnEntityData CreateNewSpawnPoint(EbxAsset parentAsset, LinearTransform transform, string teamId, int priority, bool defaultEnabled)
