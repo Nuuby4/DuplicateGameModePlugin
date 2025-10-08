@@ -381,7 +381,7 @@ namespace DuplicateGameModePlugin
                             PointerRef spPtr = CreateExternalPointer(parentAsset, CreateNewSpawnLocationFinderShape(parentAsset, points, team.ToString(), defaultEnabled));
                             for (int i = 0; i < gameModeBlueprint.Count; i++)
                             {
-                                CreateLinkConnection(selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint[i], gameModeLinkNames[i], spPtr, DefaultLinkPort);
+                                CreateLinkConnection(selectedSubWorld.RootObject as SubWorldData, gameModeBlueprint[i], defaultSLFNames[i], spPtr, DefaultLinkPort);
                             }
                             index+= defaultSLFNames.Count;
                         }
